@@ -25,13 +25,14 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: maven
 
-      - name: Build with Maven
-        run: mvn clean install
-
-      - name: Run Tests
-        run: mvn test
+      - name: Build and Test Auth Service
+        run: |
+          cd services/auth-service
+          mvn clean install
+          mvn test
 
       - name: Package the Application
-        run: mvn package
+        run: |
+          cd services/auth-service
+          mvn package
