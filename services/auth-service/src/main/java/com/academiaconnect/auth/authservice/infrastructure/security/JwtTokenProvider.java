@@ -139,6 +139,9 @@ public class JwtTokenProvider {
      */
     public String getCurrentUsername() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        return (authentication != null) ? authentication.getName() : null;
+        if (authentication != null && authentication.isAuthenticated()) {
+            return authentication.getName();
+        }
+        return null;
     }
 }
