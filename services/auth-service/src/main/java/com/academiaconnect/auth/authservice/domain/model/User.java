@@ -1,5 +1,6 @@
 package com.academiaconnect.auth.authservice.domain.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -7,7 +8,8 @@ import java.util.Set;
 
 @Entity
 @Table(name = "users")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -23,7 +25,8 @@ public class User {
     private String email;
 
     @Column(nullable = false)
-    private String password; // stored as a hashed password
+    @JsonIgnore
+    private String password;
 
     @ElementCollection(fetch = FetchType.EAGER)
     @Enumerated(EnumType.STRING)
