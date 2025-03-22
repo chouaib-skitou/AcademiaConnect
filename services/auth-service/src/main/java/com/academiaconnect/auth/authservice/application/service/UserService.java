@@ -10,6 +10,7 @@ public interface UserService {
     TokenResponse login(LoginRequest loginRequest);
     TokenResponse refreshToken(String refreshToken);
     User getCurrentUser();
+    String verifyEmail(String token); // Changed to return the redirect URL
     void resetPasswordRequest(String email);
     void resetPassword(String token, String newPassword);
 }

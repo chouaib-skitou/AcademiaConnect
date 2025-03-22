@@ -3,18 +3,29 @@ package com.academiaconnect.auth.authservice.application.service;
 import com.academiaconnect.auth.authservice.application.dto.LoginRequest;
 import com.academiaconnect.auth.authservice.application.dto.RegisterRequest;
 import com.academiaconnect.auth.authservice.application.dto.TokenResponse;
+import com.academiaconnect.auth.authservice.application.exception.InvalidTokenException;
+import com.academiaconnect.auth.authservice.application.exception.ResourceAlreadyExistsException;
+import com.academiaconnect.auth.authservice.application.exception.UnverifiedAccountException;
 import com.academiaconnect.auth.authservice.domain.model.Role;
 import com.academiaconnect.auth.authservice.domain.model.User;
+import com.academiaconnect.auth.authservice.domain.model.VerificationToken;
 import com.academiaconnect.auth.authservice.domain.repository.UserRepository;
+import com.academiaconnect.auth.authservice.domain.repository.VerificationTokenRepository;
+import com.academiaconnect.auth.authservice.infrastructure.email.EmailService;
 import com.academiaconnect.auth.authservice.infrastructure.security.JwtTokenProvider;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -24,10 +35,24 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
+    private final VerificationTokenRepository tokenRepository;
+    private final EmailService emailService;
+
+    @Value("${frontend.url}")
+    private String frontendUrl;
 
     @Override
     @Transactional
     public User registerUser(RegisterRequest registerRequest) {
+        // Check if username or email already exists
+        if (userRepository.findByUsername(registerRequest.getUsername()).isPresent()) {
+            throw new ResourceAlreadyExistsException("Username is already taken");
+        }
+
+        if (userRepository.findByEmail(registerRequest.getEmail()).isPresent()) {
+            throw new ResourceAlreadyExistsException("Email is already in use");
+        }
+
         User user = User.builder()
                 .username(registerRequest.getUsername())
                 .email(registerRequest.getEmail())
@@ -37,25 +62,77 @@ public class UserServiceImpl implements UserService {
                 .build();
 
         User savedUser = userRepository.save(user);
-        // In a real application, you would call an EmailService to send a verification email.
-        System.out.println("Verification email sent to " + savedUser.getEmail());
+
+        // Generate verification token
+        String token = UUID.randomUUID().toString();
+        VerificationToken verificationToken = VerificationToken.builder()
+                .token(token)
+                .user(savedUser)
+                .expiryDate(LocalDateTime.now().plusHours(24))
+                .tokenType(VerificationToken.TokenType.EMAIL_VERIFICATION)
+                .build();
+
+        tokenRepository.save(verificationToken);
+
+        // Send verification email
+        emailService.sendVerificationEmail(savedUser.getEmail(), token);
+
         return savedUser;
     }
 
     @Override
     public TokenResponse login(LoginRequest loginRequest) {
-        var authToken = new UsernamePasswordAuthenticationToken(
-                loginRequest.getUsernameOrEmail(), loginRequest.getPassword());
-        var auth = authenticationManager.authenticate(authToken);
+        try {
+            // First check if the account exists and is verified
+            User user = userRepository.findByUsername(loginRequest.getUsernameOrEmail())
+                    .orElseGet(() -> userRepository.findByEmail(loginRequest.getUsernameOrEmail())
+                            .orElse(null));
 
-        String accessToken = jwtTokenProvider.generateAccessToken(auth);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(auth);
+            if (user != null && !user.isEmailVerified()) {
+                // If user exists but email is not verified, send a new verification email
+                resendVerificationEmail(user);
+                throw new UnverifiedAccountException("Email not verified. A new verification email has been sent.");
+            }
 
-        return TokenResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .tokenType("Bearer")
+            // Proceed with authentication
+            var authToken = new UsernamePasswordAuthenticationToken(
+                    loginRequest.getUsernameOrEmail(), loginRequest.getPassword());
+            Authentication auth = authenticationManager.authenticate(authToken);
+
+            String accessToken = jwtTokenProvider.generateAccessToken(auth);
+            String refreshToken = jwtTokenProvider.generateRefreshToken(auth);
+
+            return TokenResponse.builder()
+                    .accessToken(accessToken)
+                    .refreshToken(refreshToken)
+                    .tokenType("Bearer")
+                    .build();
+        } catch (AuthenticationException e) {
+            throw new InvalidTokenException("Invalid username/email or password");
+        }
+    }
+
+    /**
+     * Helper method to resend verification email
+     */
+    private void resendVerificationEmail(User user) {
+        // Delete any existing verification tokens
+        tokenRepository.findByUserAndTokenType(user, VerificationToken.TokenType.EMAIL_VERIFICATION)
+                .ifPresent(tokenRepository::delete);
+
+        // Generate a new token
+        String token = UUID.randomUUID().toString();
+        VerificationToken verificationToken = VerificationToken.builder()
+                .token(token)
+                .user(user)
+                .expiryDate(LocalDateTime.now().plusHours(24))
+                .tokenType(VerificationToken.TokenType.EMAIL_VERIFICATION)
                 .build();
+
+        tokenRepository.save(verificationToken);
+
+        // Send new verification email
+        emailService.sendVerificationEmail(user.getEmail(), token);
     }
 
     @Override
@@ -71,27 +148,83 @@ public class UserServiceImpl implements UserService {
                     .tokenType("Bearer")
                     .build();
         } else {
-            throw new RuntimeException("Invalid refresh token");
+            throw new InvalidTokenException("Invalid or expired refresh token");
         }
     }
 
     @Override
     public User getCurrentUser() {
-        // Retrieve username from security context (here stubbed)
+        // Retrieve username from security context
         String username = jwtTokenProvider.getCurrentUsername();
+        if (username == null) {
+            throw new InvalidTokenException("Authentication required");
+        }
+
         return userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new InvalidTokenException("User not found"));
+    }
+
+    @Override
+    @Transactional
+    public String verifyEmail(String token) {
+        VerificationToken verificationToken = tokenRepository.findByToken(token)
+                .orElseThrow(() -> new InvalidTokenException("Invalid verification token"));
+
+        if (verificationToken.isExpired()) {
+            tokenRepository.delete(verificationToken);
+            throw new InvalidTokenException("Token has expired");
+        }
+
+        User user = verificationToken.getUser();
+        user.setEmailVerified(true);
+        userRepository.save(user);
+
+        tokenRepository.delete(verificationToken);
+
+        // Return the frontend URL for redirection
+        return frontendUrl + "/login?verified=true";
     }
 
     @Override
     public void resetPasswordRequest(String email) {
-        // Generate a reset token and send reset link (omitted token generation for brevity)
-        System.out.println("Password reset link sent to " + email);
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new InvalidTokenException("No user found with email: " + email));
+
+        // Remove any existing tokens
+        tokenRepository.findByUserAndTokenType(user, VerificationToken.TokenType.PASSWORD_RESET)
+                .ifPresent(tokenRepository::delete);
+
+        // Generate reset token
+        String token = UUID.randomUUID().toString();
+        VerificationToken resetToken = VerificationToken.builder()
+                .token(token)
+                .user(user)
+                .expiryDate(LocalDateTime.now().plusMinutes(30))
+                .tokenType(VerificationToken.TokenType.PASSWORD_RESET)
+                .build();
+
+        tokenRepository.save(resetToken);
+
+        // Send password reset email
+        emailService.sendPasswordResetEmail(user.getEmail(), token);
     }
 
     @Override
+    @Transactional
     public void resetPassword(String token, String newPassword) {
-        // Validate token, find the user and update the password (omitted for brevity)
-        System.out.println("Password reset successful for token: " + token);
+        VerificationToken resetToken = tokenRepository.findByToken(token)
+                .orElseThrow(() -> new InvalidTokenException("Invalid reset token"));
+
+        if (resetToken.isExpired() ||
+                resetToken.getTokenType() != VerificationToken.TokenType.PASSWORD_RESET) {
+            tokenRepository.delete(resetToken);
+            throw new InvalidTokenException("Token is invalid or has expired");
+        }
+
+        User user = resetToken.getUser();
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+
+        tokenRepository.delete(resetToken);
     }
 }
