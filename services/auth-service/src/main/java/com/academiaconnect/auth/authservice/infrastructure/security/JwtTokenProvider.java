@@ -1,14 +1,20 @@
 package com.academiaconnect.auth.authservice.infrastructure.security;
 
-import io.jsonwebtoken.*;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 import java.security.Key;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Date;
 import java.util.stream.Collectors;
 
@@ -16,20 +22,27 @@ import java.util.stream.Collectors;
 @Slf4j
 public class JwtTokenProvider {
 
-    // Inject secrets from application.properties (which in turn picks up the env variables)
+    // Secrets are injected from application.properties (which picks up environment variables)
     @Value("${jwt.secret}")
     private String jwtSecret;
 
     @Value("${jwt.refreshSecret}")
     private String jwtRefreshSecret;
 
+    // Expiration times in milliseconds
     private final long jwtExpirationInMs = 15 * 60 * 1000; // 15 minutes
     private final long jwtRefreshExpirationInMs = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+    /**
+     * Create a signing key from a secret string.
+     */
     private Key getSigningKey(String secret) {
         return Keys.hmacShaKeyFor(secret.getBytes());
     }
 
+    /**
+     * Generate an access token containing the username and roles.
+     */
     public String generateAccessToken(Authentication authentication) {
         String username = authentication.getName();
         String authorities = authentication.getAuthorities().stream()
@@ -48,6 +61,9 @@ public class JwtTokenProvider {
                 .compact();
     }
 
+    /**
+     * Generate a refresh token.
+     */
     public String generateRefreshToken(Authentication authentication) {
         String username = authentication.getName();
         Date now = new Date();
@@ -61,14 +77,23 @@ public class JwtTokenProvider {
                 .compact();
     }
 
+    /**
+     * Validate the provided access token.
+     */
     public boolean validateAccessToken(String token) {
         return validateToken(token, jwtSecret);
     }
 
+    /**
+     * Validate the provided refresh token.
+     */
     public boolean validateRefreshToken(String token) {
         return validateToken(token, jwtRefreshSecret);
     }
 
+    /**
+     * Helper method to validate a JWT token with the specified secret.
+     */
     private boolean validateToken(String token, String secret) {
         try {
             Jwts.parserBuilder()
@@ -82,6 +107,9 @@ public class JwtTokenProvider {
         return false;
     }
 
+    /**
+     * Extract username from a token.
+     */
     public String getUsernameFromToken(String token) {
         Claims claims = Jwts.parserBuilder()
                 .setSigningKey(getSigningKey(jwtSecret))
@@ -91,15 +119,26 @@ public class JwtTokenProvider {
         return claims.getSubject();
     }
 
-    public java.util.Collection<? extends GrantedAuthority> getAuthorities(String token) {
+    /**
+     * Extract authorities (roles) from a token.
+     */
+    public Collection<? extends GrantedAuthority> getAuthorities(String token) {
         Claims claims = Jwts.parserBuilder()
                 .setSigningKey(getSigningKey(jwtSecret))
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
         String roles = claims.get("roles", String.class);
-        return java.util.Arrays.stream(roles.split(","))
+        return Arrays.stream(roles.split(","))
                 .map(role -> (GrantedAuthority) () -> role)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Retrieve the current authenticated username from the SecurityContext.
+     */
+    public String getCurrentUsername() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return (authentication != null) ? authentication.getName() : null;
     }
 }
