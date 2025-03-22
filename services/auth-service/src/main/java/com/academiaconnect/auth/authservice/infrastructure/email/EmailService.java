@@ -61,7 +61,8 @@ public class EmailService {
     }
 
     public void sendPasswordResetEmail(String to, String token) {
-        String resetUrl = frontendUrl + "/reset-password?token=" + token;
+        // Change this line to use the path parameter format
+        String resetUrl = frontendUrl + "/reset-password/" + token;
         Map<String, Object> templateVariables = Map.of(
                 "name", to.split("@")[0],
                 "resetUrl", resetUrl,
