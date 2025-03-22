@@ -1,5 +1,6 @@
 package com.academiaconnect.auth.authservice.application.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.NotBlank;
 import lombok.*;
 
@@ -7,9 +8,11 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 public class LoginRequest {
-    @NotBlank
+
+    @NotBlank(message = "usernameOrEmail must not be blank")
+    @JsonAlias({"username", "usernameOrEmail"})
     private String usernameOrEmail;
 
-    @NotBlank
+    @NotBlank(message = "password must not be blank")
     private String password;
 }
