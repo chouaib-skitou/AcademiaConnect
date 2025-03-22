@@ -3,6 +3,7 @@ package com.academiaconnect.auth.authservice.presentation;
 import com.academiaconnect.auth.authservice.application.exception.InvalidTokenException;
 import com.academiaconnect.auth.authservice.application.exception.ResourceAlreadyExistsException;
 import com.academiaconnect.auth.authservice.application.exception.UnverifiedAccountException;
+import com.academiaconnect.auth.authservice.application.exception.ValidationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -74,5 +75,16 @@ public class GlobalExceptionHandler {
         body.put("message", "An unexpected error occurred");
 
         return new ResponseEntity<>(body, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @ExceptionHandler(ValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleValidationException(ValidationException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("timestamp", LocalDateTime.now().toString());
+        body.put("status", HttpStatus.BAD_REQUEST.value());
+        body.put("error", "Validation Error");
+        body.put("message", ex.getMessage());
+
+        return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
     }
 }
