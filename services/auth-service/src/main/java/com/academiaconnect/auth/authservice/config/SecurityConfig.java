@@ -50,7 +50,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/refresh",
                                 "/api/auth/verify-email/**", "/api/auth/reset-password-request",
-                                "/api/auth/reset-password", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                                "/api/auth/reset-password", "/api/auth/reset-password/**",
+                                // Correct Swagger UI paths
+                                "/swagger-ui/**", "/swagger-ui.html",
+                                "/v3/api-docs/**", "/api-docs/**", "/v3/api-docs.yaml",
+                                "/api-docs.yaml", "/api-docs/swagger-config").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
