@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.view.RedirectView;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -52,5 +53,11 @@ public class UserController {
                                                 @RequestParam("newPassword") String newPassword) {
         userService.resetPassword(token, newPassword);
         return ResponseEntity.ok("Password reset successfully.");
+    }
+
+    @GetMapping("/verify-email")
+    public RedirectView verifyEmail(@RequestParam("token") String token) {
+        String redirectUrl = userService.verifyEmail(token);
+        return new RedirectView(redirectUrl);
     }
 }
