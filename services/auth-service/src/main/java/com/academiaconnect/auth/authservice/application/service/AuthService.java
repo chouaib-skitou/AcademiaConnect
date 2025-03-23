@@ -1,8 +1,8 @@
 package com.academiaconnect.auth.authservice.application.service;
 
-import com.academiaconnect.auth.authservice.application.dto.LoginRequest;
-import com.academiaconnect.auth.authservice.application.dto.RegisterRequest;
-import com.academiaconnect.auth.authservice.application.dto.TokenResponse;
+import com.academiaconnect.auth.authservice.application.dto.auth.LoginRequest;
+import com.academiaconnect.auth.authservice.application.dto.auth.RegisterRequest;
+import com.academiaconnect.auth.authservice.application.dto.auth.TokenResponse;
 import com.academiaconnect.auth.authservice.application.dto.user.UserResponse;
 import com.academiaconnect.auth.authservice.domain.model.User;
 

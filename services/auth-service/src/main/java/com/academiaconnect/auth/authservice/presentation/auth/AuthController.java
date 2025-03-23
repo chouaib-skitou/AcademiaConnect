@@ -1,6 +1,6 @@
 package com.academiaconnect.auth.authservice.presentation.auth;
 
-import com.academiaconnect.auth.authservice.application.dto.*;
+import com.academiaconnect.auth.authservice.application.dto.auth.*;
 import com.academiaconnect.auth.authservice.application.dto.user.UserResponse;
 import com.academiaconnect.auth.authservice.application.exception.ValidationException;
 import com.academiaconnect.auth.authservice.application.service.AuthService;
