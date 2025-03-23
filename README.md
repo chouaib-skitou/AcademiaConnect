@@ -11,7 +11,7 @@ AcademiaConnect is a microservices-based e-learning platform designed with Angul
 AcademiaConnect/
 ├── frontend/
 ├── services/
-│   ├── auth-service (NestJS)
+│   ├── auth-service (Spring Boot)
 │   ├── course-service (Spring Boot)
 │   ├── video-service (Spring Boot)
 │   ├── quiz-service (NestJS)
