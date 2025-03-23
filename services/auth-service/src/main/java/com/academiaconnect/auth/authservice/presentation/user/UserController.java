@@ -1,9 +1,11 @@
-package com.academiaconnect.auth.authservice.presentation;
+package com.academiaconnect.auth.authservice.presentation.user;
 
-import com.academiaconnect.auth.authservice.application.dto.*;
-import com.academiaconnect.auth.authservice.application.exception.ValidationException;
+import com.academiaconnect.auth.authservice.application.dto.user.CreateUserRequest;
+import com.academiaconnect.auth.authservice.application.dto.user.UpdateUserRequest;
+import com.academiaconnect.auth.authservice.application.dto.user.UserPage;
+import com.academiaconnect.auth.authservice.application.dto.user.UserResponse;
 import com.academiaconnect.auth.authservice.application.service.UserService;
-import com.academiaconnect.auth.authservice.domain.model.User;
+import com.academiaconnect.auth.authservice.domain.model.Role;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -14,202 +16,179 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.view.RedirectView;
-
-import java.util.HashMap;
-import java.util.Map;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/users")
 @RequiredArgsConstructor
-@Tag(name = "Authentication", description = "Authentication and user management endpoints")
+@Tag(name = "Users", description = "User management operations")
+@SecurityRequirement(name = "bearer-jwt")
 public class UserController {
 
     private final UserService userService;
 
     @Operation(
-            summary = "Register a new user",
-            description = "Registers a new user and sends a verification email")
+            summary = "Create new user",
+            description = "Creates a new user (admin only)")
     @ApiResponses(value = {
             @ApiResponse(
-                    responseCode = "200",
-                    description = "User registered successfully",
-                    content = @Content(mediaType = "text/plain")),
+                    responseCode = "201",
+                    description = "User created successfully",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = UserResponse.class))),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid input data",
+                    content = @Content),
             @ApiResponse(
                     responseCode = "409",
                     description = "Username or email already exists",
                     content = @Content),
             @ApiResponse(
-                    responseCode = "400",
-                    description = "Invalid input data",
+                    responseCode = "403",
+                    description = "Access denied - requires admin role",
                     content = @Content)
     })
-    @PostMapping("/register")
-    public ResponseEntity<String> register(
-            @Parameter(description = "User registration details", required = true)
-            @Valid @RequestBody RegisterRequest registerRequest) {
-        userService.registerUser(registerRequest);
-        return ResponseEntity.ok("User registered successfully. Verification email sent.");
+    @PostMapping
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    public ResponseEntity<UserResponse> createUser(
+            @Parameter(description = "User creation details", required = true)
+            @Valid @RequestBody CreateUserRequest request) {
+        UserResponse createdUser = userService.createUser(request);
+        return new ResponseEntity<>(createdUser, HttpStatus.CREATED);
     }
 
     @Operation(
-            summary = "User login",
-            description = "Authenticates a user and returns JWT tokens")
+            summary = "Get user by ID",
+            description = "Retrieves user details by ID (admin only)")
     @ApiResponses(value = {
             @ApiResponse(
                     responseCode = "200",
-                    description = "Login successful",
+                    description = "User found",
                     content = @Content(
                             mediaType = "application/json",
-                            schema = @Schema(implementation = TokenResponse.class))),
+                            schema = @Schema(implementation = UserResponse.class))),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "User not found",
+                    content = @Content),
             @ApiResponse(
                     responseCode = "403",
-                    description = "Account not verified",
-                    content = @Content),
-            @ApiResponse(
-                    responseCode = "401",
-                    description = "Invalid credentials",
+                    description = "Access denied - requires admin role",
                     content = @Content)
     })
-    @PostMapping("/login")
-    public ResponseEntity<TokenResponse> login(
-            @Parameter(description = "Login credentials", required = true)
-            @Valid @RequestBody LoginRequest loginRequest) {
-        TokenResponse tokenResponse = userService.login(loginRequest);
-        return ResponseEntity.ok(tokenResponse);
+    @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    public ResponseEntity<UserResponse> getUserById(
+            @Parameter(description = "User ID", required = true)
+            @PathVariable Long id) {
+        UserResponse user = userService.getUserById(id);
+        return ResponseEntity.ok(user);
     }
 
     @Operation(
-            summary = "Refresh JWT token",
-            description = "Generate a new access token using a valid refresh token")
+            summary = "Get all users with optional filtering",
+            description = "Retrieves users with pagination, sorting and optional filtering by username and/or role (admin only)")
     @ApiResponses(value = {
             @ApiResponse(
                     responseCode = "200",
-                    description = "Token refreshed successfully",
+                    description = "Users retrieved successfully",
                     content = @Content(
                             mediaType = "application/json",
-                            schema = @Schema(implementation = TokenResponse.class))),
+                            schema = @Schema(implementation = UserPage.class))),
             @ApiResponse(
-                    responseCode = "400",
-                    description = "Invalid or expired refresh token",
+                    responseCode = "403",
+                    description = "Access denied - requires admin role",
                     content = @Content)
     })
-    @PostMapping("/refresh")
-    public ResponseEntity<TokenResponse> refreshToken(
-            @Parameter(description = "Refresh token", required = true)
-            @RequestParam("refreshToken") String refreshToken) {
-        TokenResponse tokenResponse = userService.refreshToken(refreshToken);
-        return ResponseEntity.ok(tokenResponse);
+    @GetMapping
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    public ResponseEntity<UserPage> getUsers(
+            @Parameter(description = "Filter by username (optional)")
+            @RequestParam(required = false) String username,
+
+            @Parameter(description = "Filter by role (optional)")
+            @RequestParam(required = false) Role role,
+
+            @Parameter(description = "Page number (0-based)")
+            @RequestParam(defaultValue = "0") int page,
+
+            @Parameter(description = "Page size")
+            @RequestParam(defaultValue = "10") int size,
+
+            @Parameter(description = "Sort field")
+            @RequestParam(defaultValue = "id") String sortBy,
+
+            @Parameter(description = "Sort direction (asc or desc)")
+            @RequestParam(defaultValue = "asc") String direction) {
+
+        return ResponseEntity.ok(userService.getUsers(username, role, page, size, sortBy, direction));
     }
 
     @Operation(
-            summary = "Get current user",
-            description = "Returns the currently authenticated user's details",
-            security = { @SecurityRequirement(name = "bearer-jwt") })
+            summary = "Update user",
+            description = "Updates a user's details (admin only)")
     @ApiResponses(value = {
             @ApiResponse(
                     responseCode = "200",
-                    description = "User details retrieved successfully",
-                    content = @Content(mediaType = "application/json")),
-            @ApiResponse(
-                    responseCode = "401",
-                    description = "Not authenticated",
-                    content = @Content)
-    })
-    @GetMapping("/me")
-    public ResponseEntity<Map<String, Object>> currentUser() {
-        User user = userService.getCurrentUser();
-
-        // Create a map to avoid serialization issues
-        Map<String, Object> userDetails = new HashMap<>();
-        userDetails.put("id", user.getId());
-        userDetails.put("username", user.getUsername());
-        userDetails.put("email", user.getEmail());
-        userDetails.put("roles", user.getRoles());
-        userDetails.put("emailVerified", user.isEmailVerified());
-
-        return ResponseEntity.ok(userDetails);
-    }
-
-    @Operation(
-            summary = "Request password reset",
-            description = "Sends a password reset email to the user")
-    @ApiResponses(value = {
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "Password reset email sent",
-                    content = @Content(mediaType = "text/plain")),
+                    description = "User updated successfully",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = UserResponse.class))),
             @ApiResponse(
                     responseCode = "400",
-                    description = "Invalid email format",
+                    description = "Invalid input data",
                     content = @Content),
             @ApiResponse(
                     responseCode = "404",
-                    description = "Email not found",
+                    description = "User not found",
+                    content = @Content),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "Username or email already exists",
+                    content = @Content),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Access denied - requires admin role",
                     content = @Content)
     })
-    @PostMapping("/reset-password-request")
-    public ResponseEntity<String> resetPasswordRequest(
-            @Parameter(description = "Email reset request", required = true)
-            @Valid @RequestBody ResetPasswordRequest request) {
-        userService.resetPasswordRequest(request.getEmail());
-        return ResponseEntity.ok("Password reset link sent to email.");
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    public ResponseEntity<UserResponse> updateUser(
+            @Parameter(description = "User ID", required = true)
+            @PathVariable Long id,
+            @Parameter(description = "User update details", required = true)
+            @Valid @RequestBody UpdateUserRequest request) {
+        UserResponse updatedUser = userService.updateUser(id, request);
+        return ResponseEntity.ok(updatedUser);
     }
 
     @Operation(
-            summary = "Reset password",
-            description = "Resets user password using a valid token")
+            summary = "Delete user",
+            description = "Deletes a user (admin only)")
     @ApiResponses(value = {
             @ApiResponse(
-                    responseCode = "200",
-                    description = "Password reset successful",
-                    content = @Content(mediaType = "text/plain")),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "Invalid token or passwords don't match",
-                    content = @Content),
+                    responseCode = "204",
+                    description = "User deleted successfully"),
             @ApiResponse(
                     responseCode = "404",
-                    description = "Token not found",
-                    content = @Content)
-    })
-    @PostMapping("/reset-password/{token}")
-    public ResponseEntity<String> resetPasswordWithPathToken(
-            @Parameter(description = "Reset token from email", required = true)
-            @PathVariable("token") String token,
-            @Parameter(description = "New password details", required = true)
-            @Valid @RequestBody PasswordUpdateDto passwordUpdateDto) {
-
-        // Check if passwords match
-        if (!passwordUpdateDto.getNewPassword().equals(passwordUpdateDto.getConfirmNewPassword())) {
-            throw new ValidationException("Passwords do not match");
-        }
-
-        userService.resetPassword(token, passwordUpdateDto.getNewPassword());
-        return ResponseEntity.ok("Password reset successfully.");
-    }
-
-    @Operation(
-            summary = "Verify email",
-            description = "Verifies user's email address using the token sent via email and redirects to frontend",
-            security = { })
-    @ApiResponses(value = {
-            @ApiResponse(
-                    responseCode = "302",
-                    description = "Email verified successfully, redirected to frontend",
+                    description = "User not found",
                     content = @Content),
             @ApiResponse(
-                    responseCode = "400",
-                    description = "Invalid or expired token",
+                    responseCode = "403",
+                    description = "Access denied - requires admin role",
                     content = @Content)
     })
-    @GetMapping("/verify-email")
-    public RedirectView verifyEmail(
-            @Parameter(description = "Email verification token", required = true)
-            @RequestParam("token") String token) {
-        String redirectUrl = userService.verifyEmail(token);
-        return new RedirectView(redirectUrl);
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    public ResponseEntity<Void> deleteUser(
+            @Parameter(description = "User ID", required = true)
+            @PathVariable Long id) {
+        userService.deleteUser(id);
+        return ResponseEntity.noContent().build();
     }
 }
