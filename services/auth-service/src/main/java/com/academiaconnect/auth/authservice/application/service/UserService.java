@@ -1,16 +1,18 @@
 package com.academiaconnect.auth.authservice.application.service;
 
-import com.academiaconnect.auth.authservice.application.dto.LoginRequest;
-import com.academiaconnect.auth.authservice.application.dto.RegisterRequest;
-import com.academiaconnect.auth.authservice.application.dto.TokenResponse;
-import com.academiaconnect.auth.authservice.domain.model.User;
+import com.academiaconnect.auth.authservice.application.dto.user.CreateUserRequest;
+import com.academiaconnect.auth.authservice.application.dto.user.UpdateUserRequest;
+import com.academiaconnect.auth.authservice.application.dto.user.UserPage;
+import com.academiaconnect.auth.authservice.application.dto.user.UserResponse;
+import com.academiaconnect.auth.authservice.domain.model.Role;
 
 public interface UserService {
-    User registerUser(RegisterRequest registerRequest);
-    TokenResponse login(LoginRequest loginRequest);
-    TokenResponse refreshToken(String refreshToken);
-    User getCurrentUser();
-    String verifyEmail(String token); // Changed to return the redirect URL
-    void resetPasswordRequest(String email);
-    void resetPassword(String token, String newPassword);
+    // CRUD operations
+    UserResponse createUser(CreateUserRequest request);
+    UserResponse getUserById(Long id);
+    UserResponse updateUser(Long id, UpdateUserRequest request);
+    void deleteUser(Long id);
+
+    // Unified method for getting users with optional filtering
+    UserPage getUsers(String username, Role role, int page, int size, String sortBy, String direction);
 }

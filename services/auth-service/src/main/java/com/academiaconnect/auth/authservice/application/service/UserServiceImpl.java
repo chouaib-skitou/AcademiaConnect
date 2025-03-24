@@ -1,31 +1,26 @@
 package com.academiaconnect.auth.authservice.application.service;
 
-import com.academiaconnect.auth.authservice.application.dto.LoginRequest;
-import com.academiaconnect.auth.authservice.application.dto.RegisterRequest;
-import com.academiaconnect.auth.authservice.application.dto.TokenResponse;
-import com.academiaconnect.auth.authservice.application.exception.InvalidTokenException;
+import com.academiaconnect.auth.authservice.application.dto.user.CreateUserRequest;
+import com.academiaconnect.auth.authservice.application.dto.user.UpdateUserRequest;
+import com.academiaconnect.auth.authservice.application.dto.user.UserPage;
+import com.academiaconnect.auth.authservice.application.dto.user.UserResponse;
 import com.academiaconnect.auth.authservice.application.exception.ResourceAlreadyExistsException;
-import com.academiaconnect.auth.authservice.application.exception.UnverifiedAccountException;
+import com.academiaconnect.auth.authservice.application.exception.ResourceNotFoundException;
 import com.academiaconnect.auth.authservice.domain.model.Role;
 import com.academiaconnect.auth.authservice.domain.model.User;
-import com.academiaconnect.auth.authservice.domain.model.VerificationToken;
 import com.academiaconnect.auth.authservice.domain.repository.UserRepository;
-import com.academiaconnect.auth.authservice.domain.repository.VerificationTokenRepository;
-import com.academiaconnect.auth.authservice.infrastructure.email.EmailService;
-import com.academiaconnect.auth.authservice.infrastructure.security.JwtTokenProvider;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.AuthenticationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
-import java.time.LocalDateTime;
-import java.util.Collections;
-import java.util.UUID;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -33,198 +28,122 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final AuthenticationManager authenticationManager;
-    private final JwtTokenProvider jwtTokenProvider;
-    private final VerificationTokenRepository tokenRepository;
-    private final EmailService emailService;
-
-    @Value("${frontend.url}")
-    private String frontendUrl;
 
     @Override
     @Transactional
-    public User registerUser(RegisterRequest registerRequest) {
+    public UserResponse createUser(CreateUserRequest request) {
         // Check if username or email already exists
-        if (userRepository.findByUsername(registerRequest.getUsername()).isPresent()) {
+        if (userRepository.findByUsername(request.getUsername()).isPresent()) {
             throw new ResourceAlreadyExistsException("Username is already taken");
         }
 
-        if (userRepository.findByEmail(registerRequest.getEmail()).isPresent()) {
+        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
             throw new ResourceAlreadyExistsException("Email is already in use");
         }
 
         User user = User.builder()
-                .username(registerRequest.getUsername())
-                .email(registerRequest.getEmail())
-                .password(passwordEncoder.encode(registerRequest.getPassword()))
-                .roles(Collections.singleton(Role.USER))
-                .emailVerified(false)
+                .username(request.getUsername())
+                .email(request.getEmail())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .roles(request.getRoles())
+                .emailVerified(true) // Admin-created users are verified by default
                 .build();
 
         User savedUser = userRepository.save(user);
-
-        // Generate verification token
-        String token = UUID.randomUUID().toString();
-        VerificationToken verificationToken = VerificationToken.builder()
-                .token(token)
-                .user(savedUser)
-                .expiryDate(LocalDateTime.now().plusHours(24))
-                .tokenType(VerificationToken.TokenType.EMAIL_VERIFICATION)
-                .build();
-
-        tokenRepository.save(verificationToken);
-
-        // Send verification email
-        emailService.sendVerificationEmail(savedUser.getEmail(), token);
-
-        return savedUser;
+        return mapUserToResponse(savedUser);
     }
 
     @Override
-    public TokenResponse login(LoginRequest loginRequest) {
-        try {
-            // First check if the account exists and is verified
-            User user = userRepository.findByUsername(loginRequest.getUsernameOrEmail())
-                    .orElseGet(() -> userRepository.findByEmail(loginRequest.getUsernameOrEmail())
-                            .orElse(null));
-
-            if (user != null && !user.isEmailVerified()) {
-                // If user exists but email is not verified, send a new verification email
-                resendVerificationEmail(user);
-                throw new UnverifiedAccountException("Email not verified. A new verification email has been sent.");
-            }
-
-            // Proceed with authentication
-            var authToken = new UsernamePasswordAuthenticationToken(
-                    loginRequest.getUsernameOrEmail(), loginRequest.getPassword());
-            Authentication auth = authenticationManager.authenticate(authToken);
-
-            String accessToken = jwtTokenProvider.generateAccessToken(auth);
-            String refreshToken = jwtTokenProvider.generateRefreshToken(auth);
-
-            return TokenResponse.builder()
-                    .accessToken(accessToken)
-                    .refreshToken(refreshToken)
-                    .tokenType("Bearer")
-                    .build();
-        } catch (AuthenticationException e) {
-            throw new InvalidTokenException("Invalid username/email or password");
-        }
-    }
-
-    /**
-     * Helper method to resend verification email
-     */
-    private void resendVerificationEmail(User user) {
-        // Delete any existing verification tokens
-        tokenRepository.findByUserAndTokenType(user, VerificationToken.TokenType.EMAIL_VERIFICATION)
-                .ifPresent(tokenRepository::delete);
-
-        // Generate a new token
-        String token = UUID.randomUUID().toString();
-        VerificationToken verificationToken = VerificationToken.builder()
-                .token(token)
-                .user(user)
-                .expiryDate(LocalDateTime.now().plusHours(24))
-                .tokenType(VerificationToken.TokenType.EMAIL_VERIFICATION)
-                .build();
-
-        tokenRepository.save(verificationToken);
-
-        // Send new verification email
-        emailService.sendVerificationEmail(user.getEmail(), token);
+    public UserResponse getUserById(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
+        return mapUserToResponse(user);
     }
 
     @Override
-    public TokenResponse refreshToken(String refreshToken) {
-        if (jwtTokenProvider.validateRefreshToken(refreshToken)) {
-            String username = jwtTokenProvider.getUsernameFromToken(refreshToken);
-            var authToken = new UsernamePasswordAuthenticationToken(
-                    username, null, jwtTokenProvider.getAuthorities(refreshToken));
-            String newAccessToken = jwtTokenProvider.generateAccessToken(authToken);
-            return TokenResponse.builder()
-                    .accessToken(newAccessToken)
-                    .refreshToken(refreshToken)
-                    .tokenType("Bearer")
-                    .build();
+    public UserPage getUsers(String username, Role role, int page, int size, String sortBy, String direction) {
+        Sort.Direction sortDirection = "desc".equalsIgnoreCase(direction) ? Sort.Direction.DESC : Sort.Direction.ASC;
+        Pageable pageable = PageRequest.of(page, size, Sort.by(sortDirection, sortBy));
+
+        Page<User> userPage;
+
+        // Determine which query to use based on the provided parameters
+        if (StringUtils.hasText(username) && role != null) {
+            userPage = userRepository.findByUsernameContainingAndRolesContaining(username, role, pageable);
+        } else if (StringUtils.hasText(username)) {
+            userPage = userRepository.findByUsernameContaining(username, pageable);
+        } else if (role != null) {
+            userPage = userRepository.findByRolesContaining(role, pageable);
         } else {
-            throw new InvalidTokenException("Invalid or expired refresh token");
-        }
-    }
-
-    @Override
-    public User getCurrentUser() {
-        // Retrieve username from security context
-        String username = jwtTokenProvider.getCurrentUsername();
-        if (username == null) {
-            throw new InvalidTokenException("Authentication required");
+            userPage = userRepository.findAll(pageable);
         }
 
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new InvalidTokenException("User not found"));
+        return mapToUserPage(userPage, page, size);
     }
 
     @Override
     @Transactional
-    public String verifyEmail(String token) {
-        VerificationToken verificationToken = tokenRepository.findByToken(token)
-                .orElseThrow(() -> new InvalidTokenException("Invalid verification token"));
+    public UserResponse updateUser(Long id, UpdateUserRequest request) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
 
-        if (verificationToken.isExpired()) {
-            tokenRepository.delete(verificationToken);
-            throw new InvalidTokenException("Token has expired");
+        // Check if username is being changed and is already taken
+        if (request.getUsername() != null && !request.getUsername().equals(user.getUsername())) {
+            userRepository.findByUsername(request.getUsername())
+                    .ifPresent(u -> {
+                        throw new ResourceAlreadyExistsException("Username is already taken");
+                    });
+            user.setUsername(request.getUsername());
         }
 
-        User user = verificationToken.getUser();
-        user.setEmailVerified(true);
-        userRepository.save(user);
+        // Check if email is being changed and is already taken
+        if (request.getEmail() != null && !request.getEmail().equals(user.getEmail())) {
+            userRepository.findByEmail(request.getEmail())
+                    .ifPresent(u -> {
+                        throw new ResourceAlreadyExistsException("Email is already in use");
+                    });
+            user.setEmail(request.getEmail());
+        }
 
-        tokenRepository.delete(verificationToken);
+        // Update roles if provided
+        if (request.getRoles() != null && !request.getRoles().isEmpty()) {
+            user.setRoles(request.getRoles());
+        }
 
-        // Return the frontend URL for redirection
-        return frontendUrl + "/login?verified=true";
+        User updatedUser = userRepository.save(user);
+        return mapUserToResponse(updatedUser);
     }
 
     @Override
-    public void resetPasswordRequest(String email) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new InvalidTokenException("No user found with email: " + email));
+    @Transactional
+    public void deleteUser(Long id) {
+        if (!userRepository.existsById(id)) {
+            throw new ResourceNotFoundException("User not found with id: " + id);
+        }
+        userRepository.deleteById(id);
+    }
 
-        // Remove any existing tokens
-        tokenRepository.findByUserAndTokenType(user, VerificationToken.TokenType.PASSWORD_RESET)
-                .ifPresent(tokenRepository::delete);
-
-        // Generate reset token
-        String token = UUID.randomUUID().toString();
-        VerificationToken resetToken = VerificationToken.builder()
-                .token(token)
-                .user(user)
-                .expiryDate(LocalDateTime.now().plusMinutes(30))
-                .tokenType(VerificationToken.TokenType.PASSWORD_RESET)
+    private UserResponse mapUserToResponse(User user) {
+        return UserResponse.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .roles(user.getRoles())
+                .emailVerified(user.isEmailVerified())
                 .build();
-
-        tokenRepository.save(resetToken);
-
-        // Send password reset email
-        emailService.sendPasswordResetEmail(user.getEmail(), token);
     }
 
-    @Override
-    @Transactional
-    public void resetPassword(String token, String newPassword) {
-        VerificationToken resetToken = tokenRepository.findByToken(token)
-                .orElseThrow(() -> new InvalidTokenException("Invalid reset token"));
+    private UserPage mapToUserPage(Page<User> userPage, int page, int size) {
+        List<UserResponse> userResponses = userPage.getContent().stream()
+                .map(this::mapUserToResponse)
+                .collect(Collectors.toList());
 
-        if (resetToken.isExpired() ||
-                resetToken.getTokenType() != VerificationToken.TokenType.PASSWORD_RESET) {
-            tokenRepository.delete(resetToken);
-            throw new InvalidTokenException("Token is invalid or has expired");
-        }
-
-        User user = resetToken.getUser();
-        user.setPassword(passwordEncoder.encode(newPassword));
-        userRepository.save(user);
-
-        tokenRepository.delete(resetToken);
+        return UserPage.builder()
+                .users(userResponses)
+                .page(page)
+                .size(size)
+                .totalElements(userPage.getTotalElements())
+                .totalPages(userPage.getTotalPages())
+                .build();
     }
 }
