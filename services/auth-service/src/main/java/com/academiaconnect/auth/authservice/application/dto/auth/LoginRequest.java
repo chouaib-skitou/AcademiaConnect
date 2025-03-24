@@ -1,4 +1,4 @@
-package com.academiaconnect.auth.authservice.application.dto;
+package com.academiaconnect.auth.authservice.application.dto.auth;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.NotBlank;

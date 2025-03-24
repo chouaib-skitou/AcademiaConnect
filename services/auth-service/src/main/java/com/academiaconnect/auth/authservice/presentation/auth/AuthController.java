@@ -1,9 +1,9 @@
-package com.academiaconnect.auth.authservice.presentation;
+package com.academiaconnect.auth.authservice.presentation.auth;
 
-import com.academiaconnect.auth.authservice.application.dto.*;
+import com.academiaconnect.auth.authservice.application.dto.auth.*;
+import com.academiaconnect.auth.authservice.application.dto.user.UserResponse;
 import com.academiaconnect.auth.authservice.application.exception.ValidationException;
-import com.academiaconnect.auth.authservice.application.service.UserService;
-import com.academiaconnect.auth.authservice.domain.model.User;
+import com.academiaconnect.auth.authservice.application.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -18,16 +18,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.view.RedirectView;
 
-import java.util.HashMap;
-import java.util.Map;
-
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
-@Tag(name = "Authentication", description = "Authentication and user management endpoints")
-public class UserController {
+@Tag(name = "Authentication", description = "Authentication operations including registration, login, and password management")
+public class AuthController {
 
-    private final UserService userService;
+    private final AuthService authService;
 
     @Operation(
             summary = "Register a new user",
@@ -50,7 +47,7 @@ public class UserController {
     public ResponseEntity<String> register(
             @Parameter(description = "User registration details", required = true)
             @Valid @RequestBody RegisterRequest registerRequest) {
-        userService.registerUser(registerRequest);
+        authService.registerUser(registerRequest);
         return ResponseEntity.ok("User registered successfully. Verification email sent.");
     }
 
@@ -77,7 +74,7 @@ public class UserController {
     public ResponseEntity<TokenResponse> login(
             @Parameter(description = "Login credentials", required = true)
             @Valid @RequestBody LoginRequest loginRequest) {
-        TokenResponse tokenResponse = userService.login(loginRequest);
+        TokenResponse tokenResponse = authService.login(loginRequest);
         return ResponseEntity.ok(tokenResponse);
     }
 
@@ -100,7 +97,7 @@ public class UserController {
     public ResponseEntity<TokenResponse> refreshToken(
             @Parameter(description = "Refresh token", required = true)
             @RequestParam("refreshToken") String refreshToken) {
-        TokenResponse tokenResponse = userService.refreshToken(refreshToken);
+        TokenResponse tokenResponse = authService.refreshToken(refreshToken);
         return ResponseEntity.ok(tokenResponse);
     }
 
@@ -119,18 +116,9 @@ public class UserController {
                     content = @Content)
     })
     @GetMapping("/me")
-    public ResponseEntity<Map<String, Object>> currentUser() {
-        User user = userService.getCurrentUser();
-
-        // Create a map to avoid serialization issues
-        Map<String, Object> userDetails = new HashMap<>();
-        userDetails.put("id", user.getId());
-        userDetails.put("username", user.getUsername());
-        userDetails.put("email", user.getEmail());
-        userDetails.put("roles", user.getRoles());
-        userDetails.put("emailVerified", user.isEmailVerified());
-
-        return ResponseEntity.ok(userDetails);
+    public ResponseEntity<UserResponse> currentUser() {
+        UserResponse userResponse = authService.getCurrentUser();
+        return ResponseEntity.ok(userResponse);
     }
 
     @Operation(
@@ -154,7 +142,7 @@ public class UserController {
     public ResponseEntity<String> resetPasswordRequest(
             @Parameter(description = "Email reset request", required = true)
             @Valid @RequestBody ResetPasswordRequest request) {
-        userService.resetPasswordRequest(request.getEmail());
+        authService.resetPasswordRequest(request.getEmail());
         return ResponseEntity.ok("Password reset link sent to email.");
     }
 
@@ -187,7 +175,7 @@ public class UserController {
             throw new ValidationException("Passwords do not match");
         }
 
-        userService.resetPassword(token, passwordUpdateDto.getNewPassword());
+        authService.resetPassword(token, passwordUpdateDto.getNewPassword());
         return ResponseEntity.ok("Password reset successfully.");
     }
 
@@ -209,7 +197,7 @@ public class UserController {
     public RedirectView verifyEmail(
             @Parameter(description = "Email verification token", required = true)
             @RequestParam("token") String token) {
-        String redirectUrl = userService.verifyEmail(token);
+        String redirectUrl = authService.verifyEmail(token);
         return new RedirectView(redirectUrl);
     }
 }
