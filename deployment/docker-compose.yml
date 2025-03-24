@@ -1,0 +1,93 @@
+version: "3.8"
+
+services:
+  # Spring Boot Auth Service (Production)
+  auth-service:
+    build:
+      context: ../services/auth-service
+      dockerfile: Dockerfile
+    image: my-auth-service:latest
+    ports:
+      - "8080:8080"
+    # Load runtime environment variables from the .env file in the deployment folder
+    env_file:
+      - ./.env
+    # Optionally override or add extra environment variables here:
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://auth_service_db:5432/auth_service_db
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+    depends_on:
+      - auth_service_db
+    networks:
+      - app-network
+
+  # Spring Boot Auth Service (Test) – if needed
+  auth-service-test:
+    build:
+      context: ../services/auth-service
+      dockerfile: Dockerfile
+    image: my-auth-service-test:latest
+    ports:
+      - "8081:8080"
+    env_file:
+      - ./.env   # You might use a different env file (e.g. .env.test) for tests
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://auth_service_test_db:5432/auth_service_test_db
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=create-drop
+    depends_on:
+      - auth_service_test_db
+    networks:
+      - app-network
+
+  # Angular Frontend
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    image: my-angular-app:latest
+    ports:
+      - "4200:80"
+    networks:
+      - app-network
+
+  # PostgreSQL database for production (auth_service_db)
+  auth_service_db:
+    image: postgres:latest
+    container_name: auth_service_db
+    environment:
+      - POSTGRES_DB=auth_service_db
+      - POSTGRES_USER=root
+      - POSTGRES_PASSWORD=root
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  # PostgreSQL database for tests (auth_service_test_db)
+  auth_service_test_db:
+    image: postgres:latest
+    container_name: auth_service_test_db
+    environment:
+      - POSTGRES_DB=auth_service_test_db
+      - POSTGRES_USER=root
+      - POSTGRES_PASSWORD=root
+    ports:
+      - "5433:5432"
+    volumes:
+      - db_test_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  db_data:
+  db_test_data:
