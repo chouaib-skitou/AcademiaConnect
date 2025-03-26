@@ -96,7 +96,15 @@ services:
   #     dockerfile: Dockerfile
   #   image: quiz-service:latest
   #   ports:
-  #     - "5002:8080"
+  #     - "5003:8080"notification-service
+
+  # notification-service:
+  #   build:
+  #     context: ../services/notification-service
+  #     dockerfile: Dockerfile
+  #   image: notification-service:latest
+  #   ports:
+  #     - "5004:8080"
 
   frontend:
     build:
@@ -110,6 +118,7 @@ services:
       # - course-service
       # - video-service
       # - quiz-service
+      # - notification-service
     networks:
       - app-network
 
