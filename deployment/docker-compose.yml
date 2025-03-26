@@ -74,21 +74,21 @@ services:
     networks:
       - app-network
 
-  course-service:
-    build:
-      context: ../services/course-service
-      dockerfile: Dockerfile
-    image: course-service:latest
-    ports:
-      - "5001:8080"
+  # course-service:
+  #   build:
+  #     context: ../services/course-service
+  #     dockerfile: Dockerfile
+  #   image: course-service:latest
+  #   ports:
+  #     - "5001:8080"
 
-  video-service:
-    build:
-      context: ../services/video-service
-      dockerfile: Dockerfile
-    image: video-service:latest
-    ports:
-      - "5002:8080"
+  # video-service:
+  #   build:
+  #     context: ../services/video-service
+  #     dockerfile: Dockerfile
+  #   image: video-service:latest
+  #   ports:
+  #     - "5002:8080"
 
   frontend:
     build:
@@ -99,8 +99,8 @@ services:
       - "4200:80"
     depends_on:
       - auth-service
-      - course-service
-      - video-service
+      # - course-service
+      # - video-service
     networks:
       - app-network
 
