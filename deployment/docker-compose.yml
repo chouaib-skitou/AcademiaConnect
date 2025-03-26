@@ -70,6 +70,7 @@ services:
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
     depends_on:
       - auth_service_db
+      - mailhog
     networks:
       - app-network
 
@@ -96,6 +97,8 @@ services:
     image: my-angular-app:latest
     ports:
       - "4200:80"
+    depends_on:
+      - auth-service
     networks:
       - app-network
 
