@@ -19,25 +19,6 @@ services:
       - auth_service_db
     networks:
       - app-network
-      
-  auth-service-test:
-    build:
-      context: ../services/auth-service
-      dockerfile: Dockerfile
-    image: my-auth-service-test:latest
-    ports:
-      - "8081:8080"
-    env_file:
-      - ./.env
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://auth_service_test_db:5432/auth_service_test_db
-      - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=root
-      - SPRING_JPA_HIBERNATE_DDL_AUTO=create-drop
-    depends_on:
-      - auth_service_test_db
-    networks:
-      - app-network
 
   frontend:
     build:
