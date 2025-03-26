@@ -5,9 +5,9 @@ services:
     build:
       context: ../services/auth-service
       dockerfile: Dockerfile
-    image: my-auth-service:latest
+    image: auth-service:latest
     ports:
-      - "8080:8080"
+      - "5000:8080"
     env_file:
       - ./.env
     environment:
@@ -19,6 +19,14 @@ services:
       - auth_service_db
     networks:
       - app-network
+
+  course-service:
+    build:
+      context: ../services/course-service
+      dockerfile: Dockerfile
+    image: course-service:latest
+    ports:
+      - "5001:8080"
 
   frontend:
     build:
