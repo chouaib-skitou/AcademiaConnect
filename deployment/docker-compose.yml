@@ -90,6 +90,14 @@ services:
   #   ports:
   #     - "5002:8080"
 
+  # quiz-service:
+  #   build:
+  #     context: ../services/quiz-service
+  #     dockerfile: Dockerfile
+  #   image: quiz-service:latest
+  #   ports:
+  #     - "5002:8080"
+
   frontend:
     build:
       context: ../frontend
@@ -101,6 +109,7 @@ services:
       - auth-service
       # - course-service
       # - video-service
+      # - quiz-service
     networks:
       - app-network
 
