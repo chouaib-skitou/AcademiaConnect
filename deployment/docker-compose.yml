@@ -96,13 +96,21 @@ services:
   #     dockerfile: Dockerfile
   #   image: quiz-service:latest
   #   ports:
-  #     - "5003:8080"notification-service
+  #     - "5003:8080"
 
   # notification-service:
   #   build:
   #     context: ../services/notification-service
   #     dockerfile: Dockerfile
   #   image: notification-service:latest
+  #   ports:
+  #     - "5004:8080"
+
+  # analytics-service:
+  #   build:
+  #     context: ../services/analytics-service
+  #     dockerfile: Dockerfile
+  #   image: analytics-service:latest
   #   ports:
   #     - "5004:8080"
 
@@ -119,11 +127,10 @@ services:
       # - video-service
       # - quiz-service
       # - notification-service
+      # - analytics-service
     networks:
       - app-network
-
-  
-
+      
 networks:
   app-network:
     driver: bridge
